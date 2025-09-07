@@ -1,0 +1,48 @@
+var start_date = '2025-06-01'
+var end_date = '2025-08-31'
+var roi = 'УКАЖИТЕ НАЗВАНИЕ ПЕРЕМЕННОЙ С ГЕОМЕТРИЕЙ'
+var satellite_type = 1 // Landsat 8 = 0, Sentinel 2 = 1
+var roi_name = 'УКАЖИТЕ НАЗВАНИЕ ТЕРРИТОРИИ ДЛЯ ГЕНЕРАЦИИ В НАЗВАНИИ ФАЙЛА'
+
+
+
+var satellites = ['LANDSAT/LC08/C02/T1_L2', 'COPERNICUS/S2_SR_HARMONIZED']
+var clouds = ['CLOUD_COVER', 'CLOUDY_PIXEL_PERCENTAGE']
+var pixels = [30, 10]
+var bands = [['SR_B5', 'SR_B4'], ['B8', 'B4']]
+var pixel = pixels[satellite_type]
+var sat_names = ['Landsat_8', 'Sentinel_2']
+
+var collection = ee.ImageCollection(satellites[satellite_type])
+  .filterBounds(roi)
+  .filterDate(start_date, end_date)
+  .filter(ee.Filter.lt(clouds[satellite_type], 10))
+
+var ndviCollection = collection.map(function(image) {
+  var img;
+  if (satellite_type === 0) {
+    img = image.multiply(0.0000275).add(-0.2);
+  } else {
+    img = image;
+  }
+  var ndvi = img.normalizedDifference(bands[satellite_type]).rename('NDVI');
+  return ndvi.copyProperties(image, image.propertyNames());
+})
+
+var ndviMedian = ndviCollection.median().clip(roi);
+
+var ndviParams = {min: -1, max: 1, palette: ['blue', 'white', 'green']};
+Map.centerObject(roi, 10);
+Map.addLayer(ndviMedian, ndviParams, 'NDVI Median');
+
+var file_name = sat_names[satellite_type] + '_NDVI_' + roi_name + '_' + start_date + "_" + end_date
+
+Export.image.toDrive({
+  image: ndviMedian,
+  description: file_name,
+  folder: 'GEE_Exports',
+  fileNamePrefix: file_name,
+  scale: pixel,
+  region: roi,
+  maxPixels: 1e13
+});
